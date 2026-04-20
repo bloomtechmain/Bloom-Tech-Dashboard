@@ -580,14 +580,14 @@ app.patch('/api/admin/notifications/read-all', requireAdmin, async (req, res: Re
   } catch { res.status(500).json({ success: false, error: 'Failed to mark all read.' }); }
 });
 
-// ─── Serve React app ─────────────────────────────────────────────────────────
-const clientBuild = path.join(__dirname, '../../client/dist');
-app.use(express.static(clientBuild));
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(clientBuild, 'index.html'), err => {
-    if (err) res.status(200).json({ status: 'API running', path: clientBuild });
+// ─── Serve React app in production ───────────────────────────────────────────
+if (process.env.NODE_ENV === 'production') {
+  const clientBuild = path.join(__dirname, '../../client/dist');
+  app.use(express.static(clientBuild));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientBuild, 'index.html'));
   });
-});
+}
 
 // ─── Auto-create tables (idempotent — safe to run every startup) ──────────────
 async function initSchema() {
@@ -638,11 +638,6 @@ async function initSchema() {
     ALTER TABLE packages ADD COLUMN IF NOT EXISTS display_name  VARCHAR(100);
     ALTER TABLE packages ADD COLUMN IF NOT EXISTS price_monthly NUMERIC(10,2);
     ALTER TABLE packages ADD COLUMN IF NOT EXISTS price_yearly  NUMERIC(10,2);
-    ALTER TABLE packages ADD COLUMN IF NOT EXISTS max_users     INTEGER;
-    ALTER TABLE packages ADD COLUMN IF NOT EXISTS description   TEXT;
-
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_type     VARCHAR(50);
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS purchase_date DATE;
 
     CREATE TABLE IF NOT EXISTS sub_users (
       id            SERIAL PRIMARY KEY,
