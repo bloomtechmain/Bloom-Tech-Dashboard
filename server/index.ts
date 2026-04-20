@@ -734,8 +734,8 @@ async function seedData() {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 // Listen first so Railway healthcheck passes immediately, then init DB
-http.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+http.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on 0.0.0.0:${PORT}`);
   initSchema()
     .then(() => seedData())
     .then(() => {
