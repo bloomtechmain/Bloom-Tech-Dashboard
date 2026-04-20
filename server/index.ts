@@ -733,14 +733,17 @@ async function seedData() {
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-initSchema()
-  .then(() => seedData())
-  .then(() => {
-    checkExpiryNotifications();
-    setInterval(checkExpiryNotifications, 60 * 60 * 1000);
-    http.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
-  })
-  .catch(err => {
-    console.error('Schema init failed:', err.message);
-    process.exit(1);
-  });
+// Listen first so Railway healthcheck passes immediately, then init DB
+http.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+  initSchema()
+    .then(() => seedData())
+    .then(() => {
+      checkExpiryNotifications();
+      setInterval(checkExpiryNotifications, 60 * 60 * 1000);
+    })
+    .catch(err => {
+      console.error('Schema init failed:', err.message);
+      process.exit(1);
+    });
+});
