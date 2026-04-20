@@ -744,6 +744,5 @@ http.listen(PORT, () => {
     })
     .catch(err => {
       console.error('Schema init failed:', err.message);
-      process.exit(1);
     });
 });
