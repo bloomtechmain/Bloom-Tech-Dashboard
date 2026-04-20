@@ -12,7 +12,7 @@ dotenv.config();
 
 const app    = express();
 const http   = createServer(app);
-const PORT   = process.env.PORT || 5001;
+const PORT   = parseInt(process.env.PORT || '5001', 10);
 const JWT_SECRET = process.env.JWT_SECRET || 'bloomaudit_super_secret_key';
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
