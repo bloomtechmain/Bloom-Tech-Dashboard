@@ -8,7 +8,8 @@
     "dev": "tsx watch index.ts",
     "build": "tsc",
     "migrate": "tsx migrate.ts",
-    "seed": "tsx seed.ts"
+    "seed": "tsx seed.ts",
+    "seed:admin": "tsx seedAdmin.ts"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

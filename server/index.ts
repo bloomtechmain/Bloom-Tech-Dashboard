@@ -17,7 +17,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'bloomaudit_super_secret_key';
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 export const io = new SocketIOServer(http, {
-  cors: { origin: '*', methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] },
+  cors: {
+    origin: process.env.CLIENT_ORIGIN || '*',
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  },
 });
 
 io.on('connection', socket => {
