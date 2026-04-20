@@ -570,7 +570,9 @@ app.patch('/api/admin/notifications/read-all', requireAdmin, async (req, res: Re
 const clientBuild = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuild));
 app.get('*', (_req, res) => {
-  res.sendFile(path.join(clientBuild, 'index.html'));
+  res.sendFile(path.join(clientBuild, 'index.html'), err => {
+    if (err) res.status(200).json({ status: 'API running', path: clientBuild });
+  });
 });
 
 // ─── Auto-create tables (idempotent — safe to run every startup) ──────────────
