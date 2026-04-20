@@ -76,7 +76,6 @@ function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
 }
 
 // ─── Health ───────────────────────────────────────────────────────────────────
-app.get('/', (_req, res) => res.send('BloomAudit Backend v3 (Socket.IO) running'));
 app.get('/health', (_req, res) => res.json({ status: 'OK', timestamp: new Date().toISOString() }));
 
 // ─── Public Auth ──────────────────────────────────────────────────────────────
