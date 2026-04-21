@@ -687,9 +687,21 @@ async function initSchema() {
   console.log('Schema verified.');
 }
 
-// ─── Seed: create demo package + john@gmail.com ───────────────────────────────
+// ─── Seed: admin + demo package + john@gmail.com ─────────────────────────────
 async function seedData() {
   try {
+    // 0. Upsert admin user
+    await pool.query(
+      `INSERT INTO users (name, email, password_hash, role, account_status, source, plan_type)
+       VALUES ('Admin', 'admin@gmail.com', $1, 'admin', 'active', 'seed', 'monthly')
+       ON CONFLICT (email) DO UPDATE
+         SET password_hash = EXCLUDED.password_hash,
+             role          = 'admin',
+             account_status = 'active'`,
+      ['$2b$10$ykPeMkgsN6LYnu3kFisX4uNy89raPI5sRyIlVvBLiQzHxzLcmDEJC']
+    );
+    console.log('Seed: admin@gmail.com upserted.');
+
     // 1. Ensure the "Starter" package exists (5-user monthly plan)
     await pool.query(`
       INSERT INTO packages (name, display_name, price, plan_type, price_monthly, description, max_users, features, is_active)
