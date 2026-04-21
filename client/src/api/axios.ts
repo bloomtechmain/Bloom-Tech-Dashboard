@@ -1,10 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '',
+  baseURL: import.meta.env.VITE_API_URL || '',
 });
 
-// Attach stored token to every request automatically
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('bloomaudit_admin_token');
   if (token && config.headers) {
@@ -13,7 +12,6 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// On 401 (expired/invalid token), clear auth and redirect to login
 api.interceptors.response.use(
   res => res,
   err => {

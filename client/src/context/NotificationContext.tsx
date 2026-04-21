@@ -79,7 +79,8 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const s = io(window.location.origin, { transports: ['websocket', 'polling'] });
+    const backendUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const s = io(backendUrl, { transports: ['websocket', 'polling'] });
     setSocket(s);
 
     s.on('notification:new', (n: Notification) => {
