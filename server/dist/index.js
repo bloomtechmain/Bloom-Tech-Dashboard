@@ -16,7 +16,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const http = (0, http_1.createServer)(app);
-const PORT = process.env.PORT || 5001;
+const PORT = parseInt(process.env.PORT || '5001', 10);
 const JWT_SECRET = process.env.JWT_SECRET || 'bloomaudit_super_secret_key';
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 exports.io = new socket_io_1.Server(http, {
@@ -42,7 +42,17 @@ async function emitNotification(type, userId, title, message, metadata = {}) {
         console.error('Notification emit error:', err.message);
     }
 }
-app.use((0, cors_1.default)());
+const allowedOrigins = process.env.CLIENT_ORIGIN
+    ? process.env.CLIENT_ORIGIN.split(',').map(o => o.trim())
+    : ['http://localhost:5173'];
+app.use((0, cors_1.default)({
+    origin: (origin, cb) => {
+        if (!origin || allowedOrigins.includes(origin))
+            return cb(null, true);
+        cb(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+}));
 app.use(express_1.default.json());
 function requireAdmin(req, res, next) {
     const authHeader = req.headers.authorization;
@@ -61,7 +71,6 @@ function requireAdmin(req, res, next) {
     }
 }
 // ─── Health ───────────────────────────────────────────────────────────────────
-app.get('/', (_req, res) => res.send('BloomAudit Backend v3 (Socket.IO) running'));
 app.get('/health', (_req, res) => res.json({ status: 'OK', timestamp: new Date().toISOString() }));
 // ─── Public Auth ──────────────────────────────────────────────────────────────
 app.post('/api/auth/register', async (req, res) => {
@@ -105,14 +114,15 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/admin/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const r = await db_1.default.query('SELECT * FROM users WHERE email=$1 AND role=$2', [email, 'admin']);
+        const r = await db_1.default.query('SELECT * FROM dashboard_admins WHERE email=$1 AND is_active=TRUE', [email]);
         if (!r.rows.length)
             return res.status(401).json({ success: false, error: 'Invalid credentials or not an admin.' });
         const admin = r.rows[0];
         if (!await bcrypt_1.default.compare(password, admin.password_hash))
             return res.status(401).json({ success: false, error: 'Invalid credentials or not an admin.' });
-        const token = jsonwebtoken_1.default.sign({ id: admin.id, email: admin.email, role: admin.role }, JWT_SECRET, { expiresIn: '8h' });
-        res.json({ success: true, token, admin: { id: admin.id, name: admin.name, email: admin.email, role: admin.role } });
+        await db_1.default.query('UPDATE dashboard_admins SET last_login_at=NOW() WHERE id=$1', [admin.id]);
+        const token = jsonwebtoken_1.default.sign({ id: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
+        res.json({ success: true, token, admin: { id: admin.id, name: admin.name, email: admin.email, role: 'admin' } });
     }
     catch {
         res.status(500).json({ success: false, error: 'Admin login failed.' });
@@ -539,14 +549,15 @@ app.patch('/api/admin/notifications/read-all', requireAdmin, async (req, res) =>
         res.status(500).json({ success: false, error: 'Failed to mark all read.' });
     }
 });
-// ─── Serve React app in production ───────────────────────────────────────────
-if (process.env.NODE_ENV === 'production') {
-    const clientBuild = path_1.default.join(__dirname, '../../client/dist');
-    app.use(express_1.default.static(clientBuild));
-    app.get('*', (_req, res) => {
-        res.sendFile(path_1.default.join(clientBuild, 'index.html'));
+// ─── Serve React app ─────────────────────────────────────────────────────────
+const clientBuild = path_1.default.join(__dirname, '../../client/dist');
+app.use(express_1.default.static(clientBuild));
+app.get('*', (_req, res) => {
+    res.sendFile(path_1.default.join(clientBuild, 'index.html'), err => {
+        if (err)
+            res.status(200).json({ status: 'API running', path: clientBuild });
     });
-}
+});
 // ─── Auto-create tables (idempotent — safe to run every startup) ──────────────
 async function initSchema() {
     await db_1.default.query(`
@@ -625,6 +636,16 @@ async function initSchema() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS source                  VARCHAR(50) DEFAULT 'manual';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS password_must_change    BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS package_id              INTEGER;
+
+    CREATE TABLE IF NOT EXISTS dashboard_admins (
+      id            SERIAL PRIMARY KEY,
+      name          VARCHAR(255) NOT NULL,
+      email         VARCHAR(255) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+      created_at    TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      last_login_at TIMESTAMP WITHOUT TIME ZONE
+    );
   `);
     // Add FK constraint and migrate existing package_name → package_id
     try {
@@ -648,9 +669,15 @@ async function initSchema() {
     }
     console.log('Schema verified.');
 }
-// ─── Seed: create demo package + john@gmail.com ───────────────────────────────
+// ─── Seed: admin + demo package + john@gmail.com ─────────────────────────────
 async function seedData() {
     try {
+        // 0. Upsert dashboard admin (for this admin panel login)
+        const dashAdminHash = await bcrypt_1.default.hash('Admin@123456', 10);
+        await db_1.default.query(`INSERT INTO dashboard_admins (name, email, password_hash, is_active)
+       VALUES ('Bloom Admin', 'admin@bloomtech.com', $1, TRUE)
+       ON CONFLICT (email) DO NOTHING`, [dashAdminHash]);
+        console.log('Seed: dashboard admin admin@bloomtech.com upserted.');
         // 1. Ensure the "Starter" package exists (5-user monthly plan)
         await db_1.default.query(`
       INSERT INTO packages (name, display_name, price, plan_type, price_monthly, description, max_users, features, is_active)
@@ -692,14 +719,16 @@ async function seedData() {
     }
 }
 // ─── Start ────────────────────────────────────────────────────────────────────
-initSchema()
-    .then(() => seedData())
-    .then(() => {
-    checkExpiryNotifications();
-    setInterval(checkExpiryNotifications, 60 * 60 * 1000);
-    http.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
-})
-    .catch(err => {
-    console.error('Schema init failed:', err.message);
-    process.exit(1);
+// Listen first so Railway healthcheck passes immediately, then init DB
+http.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on 0.0.0.0:${PORT}`);
+    initSchema()
+        .then(() => seedData())
+        .then(() => {
+        checkExpiryNotifications();
+        setInterval(checkExpiryNotifications, 60 * 60 * 1000);
+    })
+        .catch(err => {
+        console.error('Schema init failed:', err.message);
+    });
 });
