@@ -130,13 +130,14 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 app.post('/api/admin/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-    const r = await pool.query('SELECT * FROM users WHERE email=$1 AND role=$2', [email, 'admin']);
+    const r = await pool.query('SELECT * FROM dashboard_admins WHERE email=$1 AND is_active=TRUE', [email]);
     if (!r.rows.length) return res.status(401).json({ success: false, error: 'Invalid credentials or not an admin.' });
     const admin = r.rows[0];
     if (!await bcrypt.compare(password, admin.password_hash))
       return res.status(401).json({ success: false, error: 'Invalid credentials or not an admin.' });
-    const token = jwt.sign({ id: admin.id, email: admin.email, role: admin.role }, JWT_SECRET, { expiresIn: '8h' });
-    res.json({ success: true, token, admin: { id: admin.id, name: admin.name, email: admin.email, role: admin.role } });
+    await pool.query('UPDATE dashboard_admins SET last_login_at=NOW() WHERE id=$1', [admin.id]);
+    const token = jwt.sign({ id: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
+    res.json({ success: true, token, admin: { id: admin.id, name: admin.name, email: admin.email, role: 'admin' } });
   } catch { res.status(500).json({ success: false, error: 'Admin login failed.' }); }
 });
 
@@ -663,6 +664,16 @@ async function initSchema() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS source                  VARCHAR(50) DEFAULT 'manual';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS password_must_change    BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS package_id              INTEGER;
+
+    CREATE TABLE IF NOT EXISTS dashboard_admins (
+      id            SERIAL PRIMARY KEY,
+      name          VARCHAR(255) NOT NULL,
+      email         VARCHAR(255) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+      created_at    TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      last_login_at TIMESTAMP WITHOUT TIME ZONE
+    );
   `);
 
   // Add FK constraint and migrate existing package_name → package_id
@@ -690,17 +701,15 @@ async function initSchema() {
 // ─── Seed: admin + demo package + john@gmail.com ─────────────────────────────
 async function seedData() {
   try {
-    // 0. Upsert admin user
+    // 0. Upsert dashboard admin (for this admin panel login)
+    const dashAdminHash = await bcrypt.hash('Admin@123456', 10);
     await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, account_status, source, plan_type)
-       VALUES ('Admin', 'admin@gmail.com', $1, 'admin', 'active', 'seed', 'monthly')
-       ON CONFLICT (email) DO UPDATE
-         SET password_hash = EXCLUDED.password_hash,
-             role          = 'admin',
-             account_status = 'active'`,
-      ['$2b$10$ykPeMkgsN6LYnu3kFisX4uNy89raPI5sRyIlVvBLiQzHxzLcmDEJC']
+      `INSERT INTO dashboard_admins (name, email, password_hash, is_active)
+       VALUES ('Bloom Admin', 'admin@bloomtech.com', $1, TRUE)
+       ON CONFLICT (email) DO NOTHING`,
+      [dashAdminHash]
     );
-    console.log('Seed: admin@gmail.com upserted.');
+    console.log('Seed: dashboard admin admin@bloomtech.com upserted.');
 
     // 1. Ensure the "Starter" package exists (5-user monthly plan)
     await pool.query(`
