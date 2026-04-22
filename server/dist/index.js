@@ -341,7 +341,10 @@ app.get('/api/admin/packages', requireAdmin, async (_req, res) => {
               COUNT(u.id) AS total_subscribers,
               COUNT(u.id) FILTER(WHERE u.account_status='active')    AS active_subscribers,
               COUNT(u.id) FILTER(WHERE u.account_status='suspended') AS suspended_subscribers,
-              COALESCE(SUM(p.price) FILTER(WHERE u.account_status='active'),0) AS revenue
+              COALESCE(SUM(
+                CASE WHEN u.plan_type='yearly' THEN COALESCE(p.price_yearly,0)
+                     ELSE COALESCE(p.price_monthly,0) END
+              ) FILTER(WHERE u.account_status='active'),0) AS revenue
        FROM packages p
        LEFT JOIN users u ON u.package_id=p.id AND u.role!='admin'
        WHERE p.is_active=TRUE
