@@ -580,14 +580,12 @@ app.patch('/api/admin/notifications/read-all', requireAdmin, async (req, res: Re
   } catch { res.status(500).json({ success: false, error: 'Failed to mark all read.' }); }
 });
 
-// ─── Serve React app in production ───────────────────────────────────────────
-if (process.env.NODE_ENV === 'production') {
-  const clientBuild = path.join(__dirname, '../../client/dist');
-  app.use(express.static(clientBuild));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(clientBuild, 'index.html'));
-  });
-}
+// ─── Serve React app ─────────────────────────────────────────────────────────
+const clientBuild = path.join(__dirname, '../../client/dist');
+app.use(express.static(clientBuild));
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientBuild, 'index.html'));
+});
 
 // ─── Auto-create tables (idempotent — safe to run every startup) ──────────────
 async function initSchema() {
