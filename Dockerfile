@@ -18,4 +18,4 @@ RUN npm run build --prefix server
 
 EXPOSE 5001
 
-CMD ["node", "server/dist/index.js"]
+CMD ["server/node_modules/.bin/tsx", "server/index.ts"]

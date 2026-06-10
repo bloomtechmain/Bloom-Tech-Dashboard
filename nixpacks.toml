@@ -11,4 +11,4 @@ cmds = [
 ]
 
 [start]
-cmd = "node server/dist/index.js"
+cmd = "server/node_modules/.bin/tsx server/index.ts"
