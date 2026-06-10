@@ -1,5 +1,5 @@
 [phases.install]
-cmds = ["npm install && npm install --prefix client && npm install --prefix server"]
+cmds = ["npm install && npm install --prefix client && npm install --include=dev --prefix server"]
 
 [phases.build]
 cmds = ["npm run build"]
