@@ -1,0 +1,12 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+client/dist/
+server/dist/
+.git/
+.env
+.env.local
+.env.production
+server/.env
+client/.env
+*.log
