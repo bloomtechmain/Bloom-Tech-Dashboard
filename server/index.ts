@@ -412,6 +412,53 @@ app.post('/api/admin/packages', requireAdmin, async (req, res: Response) => {
   }
 });
 
+// ─── Admin: Update User Package ───────────────────────────────────────────────
+app.put('/api/admin/users/:id/package', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.params.id;
+    const { package_id, plan_type, purchase_date } = req.body;
+
+    if (!package_id)
+      return res.status(400).json({ success: false, error: 'Package is required.' });
+    if (!['monthly', 'yearly'].includes(plan_type))
+      return res.status(400).json({ success: false, error: 'Plan type must be monthly or yearly.' });
+
+    const date     = purchase_date || new Date().toISOString().split('T')[0];
+    const interval = plan_type === 'yearly' ? '1 year' : '1 month';
+
+    const pkgCheck = await pool.query(
+      `SELECT id, COALESCE(display_name, name) AS display_name FROM packages WHERE id=$1 AND is_active=TRUE`,
+      [package_id]
+    );
+    if (!pkgCheck.rows.length)
+      return res.status(404).json({ success: false, error: 'Package not found.' });
+
+    const r = await pool.query(
+      `UPDATE users
+       SET package_id=$1, plan_type=$2, purchase_date=$3::date,
+           subscription_end_date=($3::date + $4::interval)
+       WHERE id=$5
+       RETURNING id, name, email, package_id, plan_type, purchase_date, subscription_end_date`,
+      [package_id, plan_type, date, interval, userId]
+    );
+    if (!r.rows.length) return res.status(404).json({ success: false, error: 'User not found.' });
+
+    const updated = r.rows[0];
+    await emitNotification(
+      'package_updated',
+      updated.id,
+      'Package Updated',
+      `${updated.name}'s package was updated to ${pkgCheck.rows[0].display_name} (${plan_type}).`,
+      { package_id, plan_type, purchase_date: date, updated_by: req.adminUser?.email }
+    );
+
+    res.json({ success: true, user: updated });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Failed to update package.' });
+  }
+});
+
 // ─── Admin: Notifications ─────────────────────────────────────────────────────
 
 /** Check for subscriptions entering their reminder window and create notifications if not already created today.

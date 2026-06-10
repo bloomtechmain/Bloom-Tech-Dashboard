@@ -4,7 +4,7 @@ import {
   ArrowLeft, Mail, Building2, Package, Users, Calendar,
   ShieldAlert, CheckCircle, XCircle, Clock, AlertTriangle,
   Plus, Trash2, UserCheck, UserX, RefreshCw, Layers,
-  DollarSign, TimerReset,
+  DollarSign, TimerReset, Pencil,
 } from 'lucide-react';
 import api from '../api/axios';
 import AdminLayout from '../layouts/AdminLayout';
@@ -113,6 +113,17 @@ const UserDetail: React.FC = () => {
   const [subFormError, setSubFormError] = useState('');
   const [subSubmitting, setSubSubmitting] = useState(false);
 
+  // Package update modal
+  const [pkgModal, setPkgModal] = useState(false);
+  const [availablePackages, setAvailablePackages] = useState<{
+    id: number; name: string; display_name: string;
+    price_monthly: number | null; price_yearly: number | null;
+  }[]>([]);
+  const [pkgForm, setPkgForm] = useState({ package_id: '', plan_type: 'monthly', purchase_date: '' });
+  const [pkgLoadingPkgs, setPkgLoadingPkgs] = useState(false);
+  const [pkgSubmitting, setPkgSubmitting] = useState(false);
+  const [pkgError, setPkgError] = useState('');
+
   const fetchUser = useCallback(async () => {
     try {
       const res = await api.get(`/api/admin/users/${id}`);
@@ -180,6 +191,46 @@ const UserDetail: React.FC = () => {
     } catch { alert('Failed to remove sub user.'); }
   };
 
+  // ── Open package update modal ──────────────────────────────────────────────
+  const openPkgModal = async () => {
+    setPkgError('');
+    setPkgForm({
+      package_id: user?.package_id?.toString() || '',
+      plan_type:  user?.plan_type || 'monthly',
+      purchase_date: new Date().toISOString().split('T')[0],
+    });
+    setPkgLoadingPkgs(true);
+    setPkgModal(true);
+    try {
+      const res = await api.get('/api/admin/packages');
+      if (res.data.success) setAvailablePackages(res.data.packages);
+    } catch {
+      setPkgError('Failed to load packages.');
+    } finally {
+      setPkgLoadingPkgs(false);
+    }
+  };
+
+  // ── Submit package update ──────────────────────────────────────────────────
+  const handlePkgUpdate = async () => {
+    if (!pkgForm.package_id) return setPkgError('Please select a package.');
+    setPkgSubmitting(true);
+    setPkgError('');
+    try {
+      await api.put(`/api/admin/users/${id}/package`, {
+        package_id:    parseInt(pkgForm.package_id),
+        plan_type:     pkgForm.plan_type,
+        purchase_date: pkgForm.purchase_date,
+      });
+      setPkgModal(false);
+      await fetchUser();
+    } catch (err: any) {
+      setPkgError(err.response?.data?.error || 'Failed to update package.');
+    } finally {
+      setPkgSubmitting(false);
+    }
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -219,6 +270,15 @@ const UserDetail: React.FC = () => {
     : user.plan_type === 'yearly'
       ? user.price_yearly
       : (user.price_monthly ?? user.price_yearly);
+
+  const selectedPkg = availablePackages.find(p => p.id.toString() === pkgForm.package_id) ?? null;
+  const computedExpiry = (() => {
+    if (!pkgForm.purchase_date) return null;
+    const d = new Date(pkgForm.purchase_date + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    pkgForm.plan_type === 'yearly' ? d.setFullYear(d.getFullYear() + 1) : d.setMonth(d.getMonth() + 1);
+    return d;
+  })();
 
   return (
     <AdminLayout title="User Detail" subtitle="Full system profile and subscription overview">
@@ -330,7 +390,19 @@ const UserDetail: React.FC = () => {
         </Section>
 
         {/* Package details */}
-        <Section icon={<Package size={16} />} title="Package Details" accent="text-indigo-400">
+        <Section
+          icon={<Package size={16} />}
+          title="Package Details"
+          accent="text-indigo-400"
+          action={
+            <button
+              onClick={openPkgModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/30 transition-all"
+            >
+              <Pencil size={12} /> Update Package
+            </button>
+          }
+        >
           <Row label="Package">{user.package_display_name || '—'}</Row>
           <Row label="Monthly Price">
             {user.price_monthly != null ? `$${Number(user.price_monthly).toFixed(2)} / mo` : '—'}
@@ -622,6 +694,145 @@ const UserDetail: React.FC = () => {
           </div>
         </div>
       )}
+      {/* ── Package update modal ─────────────────────────────────────────── */}
+      {pkgModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+
+            {/* Header */}
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <h3 className="text-white font-semibold text-lg">Update Package</h3>
+                <p className="text-slate-400 text-sm mt-0.5">
+                  Change subscription plan for <strong className="text-white">{user.name}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setPkgModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-all flex-shrink-0 ml-3"
+              >
+                <XCircle size={16} />
+              </button>
+            </div>
+
+            {/* Current package badge */}
+            {user.package_display_name && (
+              <div className="mb-4 px-3 py-2 bg-slate-900/50 border border-slate-700/50 rounded-xl flex items-center gap-2 text-xs text-slate-400">
+                <Package size={11} className="text-indigo-400 flex-shrink-0" />
+                Current:
+                <span className="text-white font-medium">{user.package_display_name}</span>
+                <span className="capitalize ml-auto text-slate-500">{user.plan_type}</span>
+              </div>
+            )}
+
+            {pkgError && (
+              <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-4">
+                <XCircle size={12} />{pkgError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Package selector */}
+              <div>
+                <label className="text-slate-300 text-sm block mb-1.5">New Package</label>
+                {pkgLoadingPkgs ? (
+                  <div className="flex items-center gap-2 text-slate-400 text-sm py-2.5">
+                    <RefreshCw size={14} className="animate-spin" /> Loading packages…
+                  </div>
+                ) : (
+                  <select
+                    value={pkgForm.package_id}
+                    onChange={e => setPkgForm(f => ({ ...f, package_id: e.target.value }))}
+                    className="w-full bg-slate-900/60 border border-slate-600 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-all"
+                  >
+                    <option value="">— Select a package —</option>
+                    {availablePackages.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.display_name}
+                        {p.price_monthly != null ? ` — $${Number(p.price_monthly).toFixed(2)}/mo` : ''}
+                        {p.price_yearly  != null ? ` / $${Number(p.price_yearly).toFixed(2)}/yr` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Billing cycle toggle */}
+              <div>
+                <label className="text-slate-300 text-sm block mb-1.5">Billing Cycle</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['monthly', 'yearly'] as const).map(t => {
+                    const price     = t === 'monthly' ? selectedPkg?.price_monthly : selectedPkg?.price_yearly;
+                    const available = price != null;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        disabled={!available}
+                        onClick={() => available && setPkgForm(f => ({ ...f, plan_type: t }))}
+                        className={`px-4 py-3 rounded-xl border text-sm font-medium transition-all text-left ${
+                          pkgForm.plan_type === t && available
+                            ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300'
+                            : available
+                              ? 'border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+                              : 'border-slate-800 text-slate-600 cursor-not-allowed opacity-40'
+                        }`}
+                      >
+                        <p className="capitalize">{t}</p>
+                        <p className="text-xs mt-0.5 font-normal opacity-80">
+                          {available ? `$${Number(price).toFixed(2)}` : 'Not offered'}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Purchase / start date */}
+              <div>
+                <label className="text-slate-300 text-sm block mb-1.5">Purchase / Start Date</label>
+                <input
+                  type="date"
+                  value={pkgForm.purchase_date}
+                  onChange={e => setPkgForm(f => ({ ...f, purchase_date: e.target.value }))}
+                  className="w-full bg-slate-900/60 border border-slate-600 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-all"
+                />
+              </div>
+
+              {/* Computed expiry preview */}
+              {computedExpiry && (
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-900/40 border border-slate-700/40 rounded-xl">
+                  <Calendar size={13} className="text-indigo-400 flex-shrink-0" />
+                  <span className="text-slate-400 text-xs">New expiry date:</span>
+                  <span className="text-white text-xs font-semibold ml-auto">
+                    {computedExpiry.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setPkgModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm hover:bg-slate-700 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePkgUpdate}
+                disabled={pkgSubmitting || !pkgForm.package_id}
+                className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              >
+                {pkgSubmitting
+                  ? <><RefreshCw size={13} className="animate-spin" /> Updating…</>
+                  : <><CheckCircle size={13} /> Confirm Update</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </AdminLayout>
   );
 };
