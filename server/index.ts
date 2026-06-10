@@ -628,7 +628,12 @@ app.patch('/api/admin/notifications/read-all', requireAdmin, async (req, res: Re
 });
 
 // ─── Serve React app ─────────────────────────────────────────────────────────
-const clientBuild = path.join(__dirname, '../../client/dist');
+// __dirname is /app/server/dist when compiled (tsc) but /app/server when run via tsx directly.
+// Both resolve to /app/client/dist with this logic.
+const clientBuild = path.resolve(
+  __dirname,
+  path.basename(__dirname) === 'dist' ? '../../client/dist' : '../client/dist'
+);
 app.use(express.static(clientBuild));
 app.get('*', (_req, res) => {
   res.sendFile(path.join(clientBuild, 'index.html'));
