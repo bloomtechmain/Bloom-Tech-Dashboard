@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch index.ts",
-    "build": "tsc",
+    "build": "node_modules/.bin/esbuild index.ts --bundle --platform=node --outfile=dist/index.js --packages=external",
     "migrate": "tsx migrate.ts",
     "seed": "tsx seed.ts",
     "seed:admin": "tsx seedAdmin.ts"
@@ -17,6 +17,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.3",
+    "esbuild": "^0.20.0",
     "pg": "^8.11.5",
     "socket.io": "^4.8.3"
   },
