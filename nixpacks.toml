@@ -2,7 +2,7 @@
 cmds = ["npm install && npm install --include=dev --prefix client && npm install --include=dev --prefix server"]
 
 [phases.build]
-cmds = ["npm run build --prefix client"]
+cmds = ["npm run build --prefix client && npm run build --prefix server"]
 
 [start]
-cmd = "./server/node_modules/.bin/tsx server/index.ts"
+cmd = "node server/dist/index.js"
